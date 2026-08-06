@@ -5,7 +5,7 @@ const features = [
     icon: Zap,
     title: "Rapidez Extrema",
     description:
-      "Arribo en menos de 20 minutos. Te conectamos con el cerrajero disponible más cercano a tu ubicación.",
+      "LLegada en menos de 20 minutos. Te conectamos con el cerrajero disponible más cercano a tu ubicación.",
   },
   {
     icon: BadgeDollarSign,
@@ -17,7 +17,7 @@ const features = [
     icon: ShieldCheck,
     title: "Técnicos Certificados",
     description:
-      "Cerrajeros validados y asegurados. Verificamos identidad, antecedentes y experiencia de cada aliado.",
+      "Cerrajeros validados y asegurados. Verificamos identidad, antecedentes y experiencia de cada aliado nuestro.",
   },
 ]
 
