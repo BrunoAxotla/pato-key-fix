@@ -34,7 +34,7 @@ export function Hero() {
               size="lg"
               className="h-12 bg-primary px-6 text-base text-primary-foreground hover:bg-primary/90"
               nativeButton={false}
-              render={<a href="/login" />}
+              render={<a href="/solicitar" />}
             >
               Solicitar Servicio Ahora
             </Button>

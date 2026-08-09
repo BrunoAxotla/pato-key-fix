@@ -96,7 +96,7 @@ export function SocialProof() {
               size="lg"
               className="h-12 shrink-0 bg-primary px-6 text-base text-primary-foreground hover:bg-primary/90"
               nativeButton={false}
-              render={<a href="#cerrajeros" />}
+              render={<a href="/aliados/login" />}
             >
               Quiero ser aliado
               <ArrowRight className="size-4" aria-hidden="true" />

@@ -50,7 +50,7 @@ export function Navbar() {
             size="lg"
             className="bg-white text-[#E53E3E] hover:bg-red-50 font-semibold shadow-sm"
             nativeButton={false}
-            render={<a href="/login" />}
+            render={<a href="/solicitar" />}
           >
             Pedir Cerrajero
           </Button>
@@ -90,7 +90,7 @@ export function Navbar() {
               size="lg"
               className="mt-2 w-full bg-white text-[#E53E3E] hover:bg-red-50 font-semibold"
               nativeButton={false}
-              render={<a href="/login" />}
+              render={<a href="/solicitar" />}
             >
               Pedir Cerrajero
             </Button>
