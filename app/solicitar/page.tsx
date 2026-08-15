@@ -41,6 +41,7 @@ export default function ServiceRequestPage() {
   const [photos, setPhotos] = useState<PhotoPreview[]>([])
   const [loadingCp, setLoadingCp] = useState(false)
   const [compressingPhotos, setCompressingPhotos] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
 
   const [formData, setFormData] = useState({
     firstName: '',
@@ -373,36 +374,117 @@ export default function ServiceRequestPage() {
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+
     if (!validateCurrentStep()) return
+
     if (!formData.firstName || !formData.lastName || !formData.phone) {
       alert('Completa tu nombre, apellido y teléfono.')
       return
     }
+
     if (formData.urgency === 'programar' && !formData.scheduleDate) {
       alert('Selecciona la fecha y hora deseada.')
       return
     }
+
     if (!formData.legalConsent) {
       alert('Debes aceptar la confirmación legal para continuar.')
       return
     }
 
-    // Payload inteligente para tu backend
-    const finalPayload = {
-      ...formData,
-      ...address,
-      serviceRequested: formData.wantsAdditionalKey 
-        ? `${formData.serviceNeeded}+llave` // para tu lógica: apertura+llave
-        : formData.serviceNeeded,
-      // Si es apertura, asumimos cerrado para no confundir al cerrajero
-      vehicleStatus: isApertura && formData.serviceType === 'automotriz' ? 'cerrado' : formData.vehicleStatus,
-      photos: photos.map(photo => photo.file.name),
-    }
+    setSubmitting(true)
 
-    console.log('Solicitud completa:', finalPayload)
-    alert('Solicitud lista para enviar. Revisa la consola.')
+    try {
+      // Mapeamos explícitamente el estado del formulario al contrato de la API.
+      // Así no enviamos datos de interfaz innecesarios ni dependemos de spreads.
+      const payload = {
+        customer: {
+          firstName: formData.firstName,
+          lastName: formData.lastName,
+          email: formData.email,
+          phone: formData.phone,
+        },
+        service: {
+          serviceType: formData.serviceType,
+          serviceNeeded: formData.serviceNeeded,
+          wantsAdditionalKey: formData.wantsAdditionalKey,
+          urgency: formData.urgency,
+          scheduleDate: formData.scheduleDate,
+          description: formData.description,
+          legalConsent: formData.legalConsent,
+        },
+        vehicle:
+          formData.serviceType === 'automotriz'
+            ? {
+                vehicleBrand: formData.vehicleBrand,
+                vehicleModel: formData.vehicleModel,
+                vehicleYear: formData.vehicleYear,
+                hasKey: formData.hasKey,
+                // La apertura se considera cerrada en backend porque ese
+                // dato no se pregunta nuevamente en el formulario.
+                vehicleStatus: isApertura ? 'cerrado' : formData.vehicleStatus,
+                keyType: formData.keyType || null,
+              }
+            : null,
+        domestic:
+          formData.serviceType === 'domestico'
+            ? {
+                doorLocked: formData.serviceNeeded === 'apertura' ? formData.doorLocked : null,
+                hasAvailableKey:
+                  formData.serviceNeeded !== 'apertura'
+                    ? formData.hasAvailableKey
+                    : null,
+                lockDamaged: formData.lockDamaged || null,
+              }
+            : null,
+        commercial:
+          formData.serviceType === 'comercial'
+            ? {
+                commercialType: formData.commercialType,
+              }
+            : null,
+        address: {
+          cp: address.cp,
+          estado: address.estado,
+          alcaldia: address.alcaldia,
+          colonia: address.colonia,
+          calleNumero: address.calleNumero,
+          referencias: address.referencias,
+        },
+      }
+
+      const response = await fetch('/api/service-requests', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      })
+
+      const result = await response.json().catch(() => null)
+
+      if (!response.ok) {
+        console.error('Error al crear solicitud:', result)
+        throw new Error(result?.error || 'No se pudo crear la solicitud.')
+      }
+
+      console.log('Solicitud creada:', result)
+
+      alert(
+        `Solicitud creada correctamente.\n\nNúmero de solicitud: ${result.service_request_id}`
+      )
+    } catch (error) {
+      console.error('Error al enviar solicitud:', error)
+      alert(
+        error instanceof Error
+          ? error.message
+          : 'Ocurrió un error al enviar la solicitud.'
+      )
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   return (
@@ -776,7 +858,20 @@ export default function ServiceRequestPage() {
               {step < 3 ? (
                 <button type="submit" className="w-full h-12 rounded-xl bg-[#E53E3E] hover:bg-[#E53E3E]/90 text-white font-bold text-sm shadow-lg active:scale-[0.99] transition-transform">Siguiente paso</button>
               ) : (
-                <button type="submit" disabled={!formData.legalConsent} className="w-full h-12 rounded-xl bg-[#E53E3E] hover:bg-[#E53E3E]/90 text-white font-bold text-sm shadow-lg active:scale-[0.99] transition-transform disabled:opacity-50">Confirmar y Solicitar Servicio</button>
+                <button
+                  type="submit"
+                  disabled={!formData.legalConsent || submitting}
+                  className="w-full h-12 rounded-xl bg-[#E53E3E] hover:bg-[#E53E3E]/90 text-white font-bold text-sm shadow-lg active:scale-[0.99] transition-transform disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  {submitting ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Enviando solicitud...
+                    </>
+                  ) : (
+                    'Confirmar y Solicitar Servicio'
+                  )}
+                </button>
               )}
             </div>
           </form>

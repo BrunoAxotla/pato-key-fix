@@ -1,50 +1,60 @@
-'use client';
+'use client'
 
-import { useEffect, useState } from 'react';
-import { supabase } from '@/lib/supabase'; // Ajusta la ruta a tu lib/supabase
+import { useState } from 'react'
 
-export default function TestDbPage() {
-  const [status, setStatus] = useState<'cargando' | 'exito' | 'error'>('cargando');
-  const [errorMessage, setErrorMessage] = useState('');
+export default function TestCustomerPage() {
+  const [message, setMessage] = useState('')
 
-  useEffect(() => {
-    async function testConnection() {
-      try {
-        // Intentamos leer la tabla customers (aunque esté vacía)
-        const { data, error } = await supabase.from('customers').select('id').limit(1);
+  const createCustomer = async () => {
+    setMessage('Creando cliente...')
 
-        if (error) {
-          console.error('Error de Supabase:', error);
-          setErrorMessage(error.message);
-          setStatus('error');
-        } else {
-          console.log('Respuesta de Supabase:', data);
-          setStatus('exito');
-        }
-      } catch (err: any) {
-        setErrorMessage(err.message || 'Error desconocido');
-        setStatus('error');
-      }
+    const response = await fetch('/api/customers', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        firstName: 'Bruno',
+        lastName: 'Prueba',
+        email: 'prueba@example.com',
+        phone: '5512345678',
+      }),
+    })
+
+    const data = await response.json()
+
+    if (!response.ok) {
+      setMessage(`Error: ${data.error}`)
+      return
     }
 
-    testConnection();
-  }, []);
+    setMessage(
+      `Cliente creado correctamente. ID: ${data.customer.id}`
+    )
+
+    console.log(data)
+  }
 
   return (
-    <div style={{ padding: '2rem', fontFamily: 'sans-serif' }}>
-      <h1>Prueba de Conexión a Supabase</h1>
-      {status === 'cargando' && <p>Conectando con PostgreSQL...</p>}
-      {status === 'exito' && (
-        <p style={{ color: 'green', fontWeight: 'bold' }}>
-          ¡Conexión exitosa! Next.js logró comunicarse con PostgreSQL/Supabase.
-        </p>
-      )}
-      {status === 'error' && (
-        <div style={{ color: 'red' }}>
-          <p><strong>Error al conectar:</strong> {errorMessage}</p>
-          <small>Recuerda revisar tus políticas de RLS o si las llaves en .env.local son correctas.</small>
-        </div>
-      )}
-    </div>
-  );
+    <main className="min-h-screen flex items-center justify-center p-8">
+      <div className="w-full max-w-md rounded-2xl border p-6">
+        <h1 className="text-xl font-bold mb-4">
+          Prueba de API
+        </h1>
+
+        <button
+          onClick={createCustomer}
+          className="w-full rounded-xl bg-[#E53E3E] px-4 py-3 text-white font-bold"
+        >
+          Crear cliente de prueba
+        </button>
+
+        {message && (
+          <p className="mt-4 text-sm">
+            {message}
+          </p>
+        )}
+      </div>
+    </main>
+  )
 }
