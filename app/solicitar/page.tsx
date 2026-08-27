@@ -472,6 +472,35 @@ export default function ServiceRequestPage() {
 
       console.log('Solicitud creada:', result)
 
+      // Las fotografías se suben después de crear la solicitud,
+      // utilizando el UUID que acaba de devolver el backend.
+      if (photos.length > 0) {
+        const photoFormData = new FormData()
+
+        photos.forEach(photo => {
+          photoFormData.append('photos', photo.file)
+        })
+
+        const photosResponse = await fetch(
+          `/api/service-requests/${result.service_request_id}/photos`,
+          {
+            method: 'POST',
+            body: photoFormData,
+          }
+        )
+
+        const photosResult = await photosResponse.json().catch(() => null)
+
+        if (!photosResponse.ok) {
+          console.error('Error al subir fotografías:', photosResult)
+          throw new Error(
+            photosResult?.error || 'La solicitud se creó, pero no se pudieron guardar las fotografías.'
+          )
+        }
+
+        console.log('Fotografías guardadas:', photosResult)
+      }
+
       alert(
         `Solicitud creada correctamente.\n\nNúmero de solicitud: ${result.service_request_id}`
       )
