@@ -32,14 +32,62 @@ export async function proxy(request: NextRequest) {
     }
   )
 
-  // Refresca/verifica la sesión de manera segura.
-  await supabase.auth.getUser()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  const pathname = request.nextUrl.pathname
+
+  const isAdminArea =
+    pathname === '/dashboard' ||
+    pathname.startsWith('/dashboard/')
+
+  const isLocksmithArea =
+    pathname === '/cerrajero' ||
+    pathname.startsWith('/cerrajero/')
+
+  if (!user) {
+    if (isAdminArea || isLocksmithArea) {
+      return NextResponse.redirect(
+        new URL('/login', request.url)
+      )
+    }
+
+    return response
+  }
+
+  const role = user.user_metadata?.role
+
+  if (isAdminArea && role !== 'admin') {
+    if (role === 'locksmith') {
+      return NextResponse.redirect(
+        new URL('/cerrajero', request.url)
+      )
+    }
+
+    return NextResponse.redirect(
+      new URL('/login', request.url)
+    )
+  }
+
+  if (isLocksmithArea && role !== 'locksmith') {
+    if (role === 'admin') {
+      return NextResponse.redirect(
+        new URL('/dashboard', request.url)
+      )
+    }
+
+    return NextResponse.redirect(
+      new URL('/login', request.url)
+    )
+  }
 
   return response
 }
 
 export const config = {
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    '/dashboard/:path*',
+    '/cerrajero/:path*',
   ],
 }
