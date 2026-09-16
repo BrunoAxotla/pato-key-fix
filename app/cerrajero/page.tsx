@@ -1,40 +1,24 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
+import LocksmithRequestsClient from './_components/LocksmithRequestsClient'
 
-export const dynamic = 'force-dynamic'
-
-export default async function CerrajeroDashboard() {
-  // ATENCIÓN: Aquí usamos el cliente normal, NO el supabaseAdmin
+export default async function CerrajeroPage() {
   const supabase = await createClient()
-  
   const { data: { user } } = await supabase.auth.getUser()
+  if (!user) redirect('/login')
+  if (user.user_metadata?.role !== 'locksmith') redirect('/dashboard')
 
-  if (!user) {
-    redirect('/login')
-  }
+  const { data: locksmith, error: locksmithError } = await supabase
+    .from('locksmiths')
+    .select('id, first_name, last_name, business_name, status')
+    .eq('user_id', user.id)
+    .single()
 
-  // Ejecutamos la función RPC que creaste en SQL
+  if (locksmithError || !locksmith || locksmith.status !== 'active') redirect('/login')
+
   const { data: requests, error } = await supabase.rpc('get_my_matching_requests')
+  const { data: activeJobs, error: activeJobsError } = await supabase.rpc('get_my_assigned_requests')
+  const activeJob = (activeJobs ?? []).find((job: any) => ['assigned', 'in_progress'].includes(job.assignment_status)) ?? null
 
-  return (
-    <main className="min-h-screen p-8 text-foreground bg-background">
-      <h1 className="text-3xl font-extrabold text-[#E53E3E]">PATO - Vista de Cerrajero</h1>
-      <p className="mt-2 text-sm text-muted-foreground">ID de usuario: {user.id}</p>
-
-      <div className="mt-8">
-        <h2 className="text-xl font-bold">Solicitudes compatibles encontradas: {requests?.length ?? 0}</h2>
-        
-        {error ? (
-          <div className="mt-4 p-4 bg-red-500/10 text-red-600 rounded-xl border border-red-500/30">
-            Error del RPC: {error.message}
-          </div>
-        ) : (
-          <pre className="mt-4 p-4 bg-muted rounded-xl overflow-auto text-xs font-mono border">
-            {/* Esto imprimirá los datos crudos en la pantalla para que podamos analizarlos */}
-            {JSON.stringify(requests, null, 2)}
-          </pre>
-        )}
-      </div>
-    </main>
-  )
+  return <LocksmithRequestsClient locksmith={locksmith} requests={requests ?? []} activeJob={activeJob} initialError={[error?.message, activeJobsError?.message].filter(Boolean).join(' | ') || null} />
 }
