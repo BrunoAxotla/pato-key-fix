@@ -36,6 +36,22 @@ const MAX_PHOTOS = 4
 const MAX_IMAGE_SIZE_MB = 1
 const MAX_IMAGE_DIMENSION = 1920
 
+const CDMX_STATE_ALIASES = new Set([
+  'distrito federal',
+  'df',
+  'cdmx',
+  'ciudad de mexico',
+  'ciudad de méxico',
+])
+
+function normalizeState(state: string) {
+  const trimmedState = state.trim()
+
+  return CDMX_STATE_ALIASES.has(trimmedState.toLocaleLowerCase('es-MX'))
+    ? 'Ciudad de México'
+    : trimmedState
+}
+
 export default function ServiceRequestPage() {
   const [step, setStep] = useState(1)
   const [photos, setPhotos] = useState<PhotoPreview[]>([])
@@ -156,7 +172,7 @@ export default function ServiceRequestPage() {
         const places = data.places || []
         setAddress(prev => ({
           ...prev,
-          estado: places[0]?.state || '',
+          estado: normalizeState(places[0]?.state || ''),
           alcaldia: prev.alcaldia,
           colonias: places.map((p: any) => p['place name']),
           colonia: places.length === 1 ? places[0]['place name'] : '',
@@ -226,7 +242,10 @@ export default function ServiceRequestPage() {
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
   ) => {
     const { name, value } = e.target
-    setAddress(prev => ({ ...prev, [name]: value }))
+    setAddress(prev => ({
+      ...prev,
+      [name]: name === 'estado' ? normalizeState(value) : value,
+    }))
   }
 
   const compressImage = async (file: File): Promise<File> => {
@@ -447,7 +466,7 @@ export default function ServiceRequestPage() {
             : null,
         address: {
           cp: address.cp,
-          estado: address.estado,
+          estado: normalizeState(address.estado),
           alcaldia: address.alcaldia,
           colonia: address.colonia,
           calleNumero: address.calleNumero,
