@@ -474,7 +474,7 @@ export default function ServiceRequestPage() {
         },
       }
 
-      const response = await fetch('/api/service-requests', {
+            const response = await fetch('/api/service-requests/tracked', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -489,19 +489,22 @@ export default function ServiceRequestPage() {
         throw new Error(result?.error || 'No se pudo crear la solicitud.')
       }
 
-      console.log('Solicitud creada:', result)
+      const serviceRequestId = result.service_request_id as string
+      const trackingToken = result.tracking_token as string
 
-      // Las fotografías se suben después de crear la solicitud,
-      // utilizando el UUID que acaba de devolver el backend.
+      if (!serviceRequestId || !trackingToken) {
+        throw new Error('La solicitud se creó pero no se pudo preparar el seguimiento.')
+      }
+
+      // Fotos se suben después, usando el ID que ya tenemos
       if (photos.length > 0) {
         const photoFormData = new FormData()
-
         photos.forEach(photo => {
           photoFormData.append('photos', photo.file)
         })
 
         const photosResponse = await fetch(
-          `/api/service-requests/${result.service_request_id}/photos`,
+          `/api/service-requests/${serviceRequestId}/photos`,
           {
             method: 'POST',
             body: photoFormData,
@@ -516,13 +519,11 @@ export default function ServiceRequestPage() {
             photosResult?.error || 'La solicitud se creó, pero no se pudieron guardar las fotografías.'
           )
         }
-
-        console.log('Fotografías guardadas:', photosResult)
       }
 
-      alert(
-        `Solicitud creada correctamente.\n\nNúmero de solicitud: ${result.service_request_id}`
-      )
+      // No hagas console.log del trackingToken - es secreto
+      window.location.assign(`/seguimiento/${encodeURIComponent(trackingToken)}`)
+      return // evita que caiga al finally con alert
     } catch (error) {
       console.error('Error al enviar solicitud:', error)
       alert(
