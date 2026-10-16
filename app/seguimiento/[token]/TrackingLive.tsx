@@ -1,11 +1,13 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import {
   Building2,
   Car,
   CheckCircle2,
   Clock3,
+  AlertTriangle,
+  Send,
   Home,
   Loader2,
   MapPin,
@@ -63,6 +65,11 @@ const statusMeta: Record<string, StatusMeta> = {
     description: 'El cerrajero indicó que terminó el servicio.',
     tone: 'success',
   },
+  disputed: {
+    title: 'Reporte recibido',
+    description: 'Recibimos tu reporte. El equipo de PATO deberá revisar lo ocurrido antes de cerrar el servicio.',
+    tone: 'active',
+  },
   completed: {
     title: 'Servicio completado',
     description: 'Este servicio ya quedó cerrado.',
@@ -115,6 +122,87 @@ export default function TrackingLive({
   const [loading, setLoading] = useState(false)
   const [expired, setExpired] = useState(false)
   const [loadError, setLoadError] = useState(false)
+  const [confirming, setConfirming] = useState(false)
+  const [confirmationError, setConfirmationError] = useState('')
+  const [reportFormOpen, setReportFormOpen] = useState(false)
+  const [problemCategory, setProblemCategory] = useState('')
+  const [problemDetails, setProblemDetails] = useState('')
+  const [problemSubmitting, setProblemSubmitting] = useState(false)
+  const [problemError, setProblemError] = useState('')
+
+  const confirmService = async () => {
+    if (confirming || request.status !== 'awaiting_customer_confirmation') return
+
+    setConfirming(true)
+    setConfirmationError('')
+
+    try {
+      const response = await fetch(
+        `/api/seguimiento/${encodeURIComponent(token)}/confirm`,
+        { method: 'POST', cache: 'no-store' }
+      )
+      const payload: { error?: string } = await response.json().catch(() => ({}))
+
+      if (!response.ok) {
+        throw new Error(payload.error || 'No se pudo confirmar el servicio.')
+      }
+
+      setRequest((current) => ({ ...current, status: 'completed' }))
+    } catch (error) {
+      setConfirmationError(
+        error instanceof Error ? error.message : 'No se pudo confirmar el servicio.'
+      )
+    } finally {
+      setConfirming(false)
+    }
+  }
+
+
+  const reportProblem = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (problemSubmitting || request.status !== 'awaiting_customer_confirmation') return
+
+    const details = problemDetails.trim()
+    if (!problemCategory) {
+      setProblemError('Selecciona el tipo de problema.')
+      return
+    }
+    if (details.length < 10) {
+      setProblemError('Describe qué ocurrió con al menos 10 caracteres.')
+      return
+    }
+    if (details.length > 2000) {
+      setProblemError('La descripción no puede superar los 2000 caracteres.')
+      return
+    }
+
+    setProblemSubmitting(true)
+    setProblemError('')
+    try {
+      const response = await fetch(
+        `/api/seguimiento/${encodeURIComponent(token)}/problem`,
+        {
+          method: 'POST',
+          cache: 'no-store',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ category: problemCategory, details }),
+        }
+      )
+      const payload: { error?: string } = await response.json().catch(() => ({}))
+      if (!response.ok) {
+        throw new Error(payload.error || 'No se pudo registrar el reporte.')
+      }
+
+      setRequest((current) => ({ ...current, status: 'disputed' }))
+      setReportFormOpen(false)
+    } catch (error) {
+      setProblemError(
+        error instanceof Error ? error.message : 'No se pudo registrar el reporte.'
+      )
+    } finally {
+      setProblemSubmitting(false)
+    }
+  }
 
   useEffect(() => {
     let active = true
@@ -145,7 +233,17 @@ export default function TrackingLive({
 
         const payload: { request?: TrackingRequest } = await response.json()
         if (active && payload.request) {
-          setRequest(payload.request)
+          setRequest((current) => {
+            // Evita que una consulta que comenzó antes de una acción del cliente
+            // restaure un estado anterior después de confirmar o reportar.
+            if (current.status === 'completed' && payload.request?.status !== 'completed') {
+              return current
+            }
+            if (current.status === 'disputed' && payload.request?.status !== 'disputed') {
+              return current
+            }
+            return payload.request as TrackingRequest
+          })
           setExpired(false)
           setLoadError(false)
         }
@@ -264,12 +362,134 @@ export default function TrackingLive({
             </div>
           )}
 
-          {locksmith && ['accepted', 'assigned', 'in_progress', 'awaiting_customer_confirmation', 'completed'].includes(request.status) && (
+          {locksmith && ['accepted', 'assigned', 'in_progress', 'awaiting_customer_confirmation', 'disputed', 'completed'].includes(request.status) && (
             <div className="mt-4 rounded-2xl border p-4">
               <div className="flex items-center gap-2 text-sm font-semibold">
                 <UserRound className="h-4 w-4" /> Cerrajero asignado
               </div>
               <p className="mt-2 text-sm font-semibold">{locksmith}</p>
+            </div>
+          )}
+
+          {request.status === 'awaiting_customer_confirmation' && (
+            <div className="mt-4 rounded-2xl border border-green-600/30 bg-green-600/5 p-4">
+              <h3 className="font-semibold">¿El trabajo quedó terminado?</h3>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Confirma únicamente si el cerrajero terminó el servicio y quedaste conforme con el trabajo realizado.
+              </p>
+              <button
+                type="button"
+                onClick={confirmService}
+                disabled={confirming}
+                className="mt-4 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-green-600 px-4 font-bold text-white transition-opacity hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {confirming && <Loader2 className="h-4 w-4 animate-spin" />}
+                {confirming ? 'Confirmando…' : 'Confirmar trabajo terminado'}
+              </button>
+              {confirmationError && (
+                <p role="alert" className="mt-3 text-sm text-red-600 dark:text-red-400">
+                  {confirmationError}
+                </p>
+              )}
+              <p className="mt-3 text-xs text-muted-foreground">
+                Si el servicio no quedó resuelto, no lo confirmes todavía.
+              </p>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setReportFormOpen((open) => !open)
+                  setProblemError('')
+                }}
+                disabled={confirming || problemSubmitting}
+                className="mt-3 flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-amber-500/40 px-4 font-semibold text-amber-700 hover:bg-amber-500/10 disabled:cursor-not-allowed disabled:opacity-60 dark:text-amber-300"
+              >
+                <AlertTriangle className="h-4 w-4" />
+                {reportFormOpen ? 'Cerrar reporte' : 'Reportar un problema'}
+              </button>
+
+              {reportFormOpen && (
+                <form onSubmit={reportProblem} className="mt-4 space-y-3 rounded-xl border bg-background p-4">
+                  <div>
+                    <label htmlFor="problem-category" className="mb-1 block text-sm font-semibold">
+                      ¿Qué ocurrió?
+                    </label>
+                    <select
+                      id="problem-category"
+                      value={problemCategory}
+                      onChange={(event) => setProblemCategory(event.target.value)}
+                      required
+                      disabled={problemSubmitting}
+                      className="w-full rounded-xl border bg-background px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-amber-500/40"
+                    >
+                      <option value="">Selecciona una opción</option>
+                      <option value="incomplete_work">El trabajo quedó incompleto</option>
+                      <option value="issue_persists">El problema sigue igual</option>
+                      <option value="damage">Hubo daños durante el servicio</option>
+                      <option value="price_disagreement">El precio o cobro no coincide con lo acordado</option>
+                      <option value="other">Otro problema</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label htmlFor="problem-details" className="mb-1 block text-sm font-semibold">
+                      Cuéntanos brevemente qué ocurrió
+                    </label>
+                    <textarea
+                      id="problem-details"
+                      value={problemDetails}
+                      onChange={(event) => setProblemDetails(event.target.value)}
+                      required
+                      minLength={10}
+                      maxLength={2000}
+                      rows={4}
+                      disabled={problemSubmitting}
+                      placeholder="Describe qué quedó pendiente o qué problema encontraste…"
+                      className="w-full resize-y rounded-xl border bg-background px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-amber-500/40"
+                    />
+                    <p className="mt-1 text-right text-xs text-muted-foreground">
+                      {problemDetails.length}/2000
+                    </p>
+                  </div>
+
+                  {problemError && (
+                    <p role="alert" className="text-sm text-red-600 dark:text-red-400">
+                      {problemError}
+                    </p>
+                  )}
+
+                  <p className="text-xs text-muted-foreground">
+                    Al enviarlo, el servicio quedará pendiente de revisión por PATO y ya no podrás confirmarlo desde este enlace.
+                  </p>
+                  <button
+                    type="submit"
+                    disabled={problemSubmitting || !problemCategory || problemDetails.trim().length < 10}
+                    className="flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-amber-600 px-4 font-bold text-white hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {problemSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
+                    <Send className="h-4 w-4" />
+                    {problemSubmitting ? 'Enviando reporte…' : 'Enviar reporte'}
+                  </button>
+                </form>
+              )}
+            </div>
+          )}
+
+          {request.status === 'disputed' && (
+            <div className="mt-4 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm" role="status">
+              <div className="flex items-center gap-2 font-semibold">
+                <AlertTriangle className="h-4 w-4" /> Reporte recibido
+              </div>
+              <p className="mt-2 text-muted-foreground">
+                El equipo de PATO recibió tu reporte. El servicio queda pendiente de revisión y no se marcará como completado automáticamente mientras se atiende el caso.
+              </p>
+            </div>
+          )}
+
+          {request.status === 'completed' && (
+            <div className="mt-4 rounded-2xl border border-green-600/30 bg-green-600/10 p-4 text-sm" role="status">
+              <p className="font-semibold">Gracias por confirmar el servicio.</p>
+              <p className="mt-1 text-muted-foreground">El trabajo quedó cerrado en PATO.</p>
             </div>
           )}
 
